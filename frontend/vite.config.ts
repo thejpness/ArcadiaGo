@@ -4,7 +4,7 @@ import vueDevTools from "vite-plugin-vue-devtools";
 import { VitePWA } from "vite-plugin-pwa";
 import tailwindcss from "@tailwindcss/vite"; // ✅ Tailwind v4 optimized plugin
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
     vueDevTools(),
@@ -14,6 +14,15 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/\/api\//], // Prevent caching API calls
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/your-backend-api\.com\/api\//,
+            handler: "NetworkOnly", // ✅ Ensures API calls always hit the server
+            options: {
+              cacheName: "api-cache",
+            }
+          }
+        ]
       },
       manifest: {
         name: "ArcadiaGo",
@@ -26,6 +35,9 @@ export default defineConfig({
           { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
           { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" }
         ]
+      },
+      devOptions: {
+        enabled: mode !== "development" ? true : false, // ✅ Disable PWA in dev mode
       }
     })
   ],
@@ -36,11 +48,14 @@ export default defineConfig({
   },
   server: {
     port: 5173, // Default Vite port, change if needed
-    strictPort: true // Ensures it doesn't auto-switch ports
+    strictPort: true, // Ensures it doesn't auto-switch ports
+    watch: {
+      usePolling: true // ✅ Fixes HMR issues on some systems
+    }
   },
   build: {
     sourcemap: false, // Disable sourcemaps in production for performance
     minify: "esbuild", // Use esbuild for faster builds
     chunkSizeWarningLimit: 600 // Prevent warnings on large files
   }
-});
+}));

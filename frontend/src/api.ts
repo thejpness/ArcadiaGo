@@ -60,20 +60,13 @@ export async function logoutUser(): Promise<string> {
 }
 
 /**
- * Fetches the authenticated user's details
+ * Fetches the authenticated user's details (now includes username)
  * @returns User data or null if not authenticated
  */
-export async function fetchUser(): Promise<{ email: string } | null> {
-  const token = localStorage.getItem("authToken");
-  if (!token) {
-    console.warn("⚠️ No auth token found. Skipping user fetch.");
-    return null;
-  }
-
+export async function fetchUser(): Promise<{ username: string; email: string; joined: string } | null> {
   try {
     const response = await fetch(`${API_URL}/user`, {
       method: "GET",
-      headers: { "Authorization": `Bearer ${token}` },
       credentials: "include",
     });
 
@@ -87,4 +80,60 @@ export async function fetchUser(): Promise<{ email: string } | null> {
     console.error("❌ Failed to fetch user:", error);
     return null;
   }
+}
+
+
+export async function updateUsername(newUsername: string): Promise<void> {
+  const response = await fetch(`${API_URL}/update-username`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ new_username: newUsername }),
+  });
+
+  if (!response.ok) throw new Error("Failed to update username");
+}
+
+export async function updateEmail(newEmail: string): Promise<void> {
+  const response = await fetch(`${API_URL}/update-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ new_email: newEmail }),
+  });
+
+  if (!response.ok) throw new Error("Failed to request email change");
+}
+
+export async function updatePassword(oldPassword: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${API_URL}/update-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  });
+
+  if (!response.ok) throw new Error("Failed to update password");
+}
+
+export async function fetchActiveSessions(): Promise<{ id: string, userAgent: string, ipAddress: string }[]> {
+  const response = await fetch(`${API_URL}/active-sessions`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!response.ok) throw new Error("Failed to fetch active sessions");
+
+  return response.json();
+}
+
+export async function logoutSession(sessionId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/logout-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+
+  if (!response.ok) throw new Error("Failed to logout session");
 }

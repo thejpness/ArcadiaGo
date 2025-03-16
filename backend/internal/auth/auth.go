@@ -32,10 +32,14 @@ func getSecret(envVar string, defaultValue string) []byte {
 var jwtSecret = getSecret("JWT_SECRET", "default-secret-key-should-be-longer-than-this")
 var jwtRefreshSecret = getSecret("JWT_REFRESH_SECRET", "default-refresh-key-should-be-longer")
 
-// ✅ Use regex only for valid characters and length
-var passwordRegex = regexp.MustCompile(`^[A-Za-z\d@$!%*?&.]{8,64}$`)
+// ✅ Regex for password, username, and email validation
+var (
+	passwordRegex = regexp.MustCompile(`^[A-Za-z\d@$!%*?&.]{8,64}$`)
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_.]{3,32}$`) // Allows letters, numbers, _ and . (3-32 chars)
+	emailRegex    = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+)
 
-// ✅ Ensure the password meets security requirements
+// ✅ Validate Password Strength
 func ValidatePassword(password string) error {
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters long")
@@ -47,10 +51,7 @@ func ValidatePassword(password string) error {
 		return errors.New("password contains invalid characters")
 	}
 
-	hasUpper := false
-	hasLower := false
-	hasNumber := false
-	hasSpecial := false
+	hasUpper, hasLower, hasNumber, hasSpecial := false, false, false, false
 	specialChars := "@$!%*?&."
 
 	for _, char := range password {
@@ -82,6 +83,22 @@ func ValidatePassword(password string) error {
 	return nil
 }
 
+// ✅ Validate Username
+func ValidateUsername(username string) error {
+	if !usernameRegex.MatchString(username) {
+		return errors.New("username must be 3-32 characters and only contain letters, numbers, underscores, or dots")
+	}
+	return nil
+}
+
+// ✅ Validate Email
+func ValidateEmail(email string) error {
+	if !emailRegex.MatchString(email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
 // ✅ Hash Password
 func HashPassword(password string) (string, error) {
 	if err := ValidatePassword(password); err != nil {
@@ -106,12 +123,12 @@ func CheckPassword(hashedPassword, password string) bool {
 	return true
 }
 
-// ✅ Generate JWT Access Token
+// ✅ Generate JWT Access Token (1 hour expiry)
 func GenerateAccessToken(userID uuid.UUID) (string, error) {
 	return generateToken(userID.String(), jwtSecret, time.Hour)
 }
 
-// ✅ Generate JWT Refresh Token
+// ✅ Generate JWT Refresh Token (7 days expiry)
 func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	return generateToken(userID.String(), jwtRefreshSecret, 7*24*time.Hour)
 }

@@ -4,12 +4,35 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
-// ✅ Corrected User Model using UUID as the primary key
+// ✅ User Model (Main Table)
 type User struct {
-	ID        uuid.UUID `db:"id" json:"id"`
-	Email     string    `db:"email" json:"email"`
-	Password  string    `db:"password"`
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	ID        uuid.UUID      `gorm:"primaryKey"`
+	Email     string         `gorm:"unique;not null"`
+	Username  string         `gorm:"unique;not null"`
+	Password  string         `gorm:"not null"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// ✅ Email Change Request Model
+type UserEmailChange struct {
+	ID        uuid.UUID `gorm:"primaryKey"`
+	UserID    uuid.UUID `gorm:"index;not null;constraint:OnDelete:CASCADE"` // Foreign key reference to User
+	NewEmail  string    `gorm:"unique;not null"`
+	Token     string    `gorm:"not null"`
+	CreatedAt time.Time
+}
+
+// ✅ User Sessions Model
+type UserSession struct {
+	ID        uuid.UUID `gorm:"primaryKey"`
+	UserID    uuid.UUID `gorm:"index;not null;constraint:OnDelete:CASCADE"` // Foreign key reference to User
+	TokenHash string    `gorm:"not null"`
+	IPAddress string
+	UserAgent string
+	CreatedAt time.Time
 }

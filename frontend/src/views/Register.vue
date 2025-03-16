@@ -1,8 +1,9 @@
 <script setup>
 import { ref, computed } from "vue";
-import { registerUser, loginUser } from "../api";
+import { registerUser } from "@/api";
 import { useRouter } from "vue-router";
-import { useAuthStore } from "../stores/auth";
+import { useAuthStore } from "@/stores/auth";
+import { usePasswordValidation } from "@/composables/usePasswordValidation"; // ✅ Import reusable password validation composable
 
 const email = ref("");
 const password = ref("");
@@ -11,48 +12,19 @@ const error = ref("");
 const success = ref("");
 const router = useRouter();
 const authStore = useAuthStore();
+
 const showPassword = ref(false);
 const showConfirmPassword = ref(false);
+
+// ✅ Use password validation composable
+const { passwordErrors, passwordMatchError, isPasswordValid } = usePasswordValidation(password, confirmPassword);
 
 // ✅ Toggle password visibility
 const passwordFieldType = computed(() => (showPassword.value ? "text" : "password"));
 const confirmPasswordFieldType = computed(() => (showConfirmPassword.value ? "text" : "password"));
 
-// ✅ Password security rules
-const passwordRules = {
-  minLength: 8,
-  hasUppercase: /[A-Z]/,
-  hasLowercase: /[a-z]/,
-  hasNumber: /\d/,
-  hasSpecial: /[@$!%*?&]/,
-};
-
-// ✅ Live validation for password security
-const passwordErrors = computed(() => {
-  const errors = [];
-  if (password.value.length < passwordRules.minLength) errors.push("At least 8 characters.");
-  if (!passwordRules.hasUppercase.test(password.value)) errors.push("At least 1 uppercase letter.");
-  if (!passwordRules.hasLowercase.test(password.value)) errors.push("At least 1 lowercase letter.");
-  if (!passwordRules.hasNumber.test(password.value)) errors.push("At least 1 number.");
-  if (!passwordRules.hasSpecial.test(password.value)) errors.push("At least 1 special character (@$!%*?&).");
-  return errors;
-});
-
-// ✅ Live validation for password match
-const passwordMatchError = computed(() => {
-  return password.value !== confirmPassword.value ? "Passwords do not match." : "";
-});
-
 // ✅ Disable button unless all conditions are met
-const isFormValid = computed(() => {
-  return (
-    email.value &&
-    password.value &&
-    confirmPassword.value &&
-    passwordErrors.value.length === 0 &&
-    passwordMatchError.value === ""
-  );
-});
+const isFormValid = computed(() => email.value && isPasswordValid.value);
 
 // ✅ Register and Auto-Login
 async function handleRegister() {

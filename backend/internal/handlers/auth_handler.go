@@ -12,6 +12,7 @@ import (
 	"github.com/thejpness/ArcadiaGo/internal/models"
 )
 
+// ✅ Register a new user
 func RegisterUser(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -19,19 +20,18 @@ func RegisterUser(c *gin.Context) {
 		return
 	}
 
-	log.Println("🔍 Received password:", user.Password) // ✅ Debug received password
+	log.Println("🔍 Received password:", user.Password) // Debug received password
 
 	// ✅ Ensure Email Uniqueness
 	var existingUser models.User
-	err := database.DB.Get(&existingUser, "SELECT id FROM users WHERE email=$1", user.Email)
-	if err == nil {
+	if err := database.DB.Where("email = ?", user.Email).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
 		return
 	}
 
 	// ✅ Validate Password Strength
 	if err := auth.ValidatePassword(user.Password); err != nil {
-		log.Println("❌ Password validation failed:", err) // ✅ Debug validation
+		log.Println("❌ Password validation failed:", err) // Debug validation
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -48,11 +48,7 @@ func RegisterUser(c *gin.Context) {
 	user.Password = hashedPassword
 
 	// ✅ Insert User into Database
-	_, err = database.DB.NamedExec(
-		`INSERT INTO users (id, email, password, created_at) VALUES (:id, :email, :password, NOW())`,
-		user,
-	)
-	if err != nil {
+	if err := database.DB.Create(&user).Error; err != nil {
 		log.Println("❌ Error inserting user:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create user"})
 		return
@@ -74,8 +70,13 @@ func LoginUser(c *gin.Context) {
 
 	// ✅ Fetch User by Email
 	var user models.User
-	err := database.DB.Get(&user, "SELECT id, password FROM users WHERE email=$1", request.Email)
-	if err != nil || !auth.CheckPassword(user.Password, request.Password) {
+	if err := database.DB.Where("email = ?", request.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	// ✅ Check Password Hash
+	if !auth.CheckPassword(user.Password, request.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
@@ -156,10 +157,15 @@ func GetUserProfile(c *gin.Context) {
 		return
 	}
 
+	// ✅ Ensure we fetch `username`, `email`, and `created_at`
 	var user struct {
-		Email string `json:"email"`
+		Username  string `json:"username"`
+		Email     string `json:"email"`
+		CreatedAt string `json:"joined"`
 	}
-	err = database.DB.Get(&user, "SELECT email FROM users WHERE id=$1", userID)
+
+	// ✅ Query to fetch username, email, and created_at
+	err = database.DB.Raw("SELECT username, email, created_at FROM users WHERE id = ?", userID).Scan(&user).Error
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
