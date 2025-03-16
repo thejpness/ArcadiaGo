@@ -22,7 +22,8 @@ export const useAuthStore = defineStore("auth", () => {
     errorMessage.value = null;
 
     try {
-      await loginUser(email, password);
+      const token = await loginUser(email, password);
+      localStorage.setItem("authToken", token); // ✅ Store token on successful login
       await loadUser(); // ✅ Fetch user data after login
       router.push("/dashboard"); // ✅ Redirect to dashboard on success
     } catch (error) {
@@ -43,6 +44,7 @@ export const useAuthStore = defineStore("auth", () => {
 
     try {
       await logoutUser();
+      localStorage.removeItem("authToken"); // ✅ Clear token on logout
       isAuthenticated.value = false;
       userEmail.value = null;
       router.push("/login"); // ✅ Redirect to login on logout
@@ -61,23 +63,31 @@ export const useAuthStore = defineStore("auth", () => {
   async function loadUser() {
     loading.value = true;
     errorMessage.value = null;
-
+  
     try {
       const user = await fetchUser();
-      userEmail.value = user.email;
-      isAuthenticated.value = true;
+      if (user) {
+        userEmail.value = user.email;
+        isAuthenticated.value = true;
+      } else {
+        isAuthenticated.value = false; // ✅ Don't break the app if unauthenticated
+        userEmail.value = null;
+      }
     } catch (error) {
-      console.warn("⚠️ Not authenticated:", error);
+      console.warn("⚠️ No user session available.");
       isAuthenticated.value = false;
       userEmail.value = null;
     } finally {
       loading.value = false;
     }
   }
-
+  
   // ✅ Auto-fetch user data when the store is initialized
   watchEffect(() => {
-    loadUser();
+    const token = localStorage.getItem("authToken");
+    if (token) {
+      loadUser(); // ✅ Only fetch user if token exists
+    }
   });
 
   return {

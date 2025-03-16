@@ -11,7 +11,6 @@ import (
 // ✅ AuthMiddleware - Protects routes by requiring authentication
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// ✅ Retrieve JWT from Secure HttpOnly Cookie
 		token, err := c.Cookie("auth_token")
 		if err != nil {
 			log.Println("⚠️ No authentication token found")
@@ -20,7 +19,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// ✅ Validate Token
 		claims, err := auth.ValidateToken(token, false)
 		if err != nil {
 			log.Println("❌ Invalid authentication token:", err)
@@ -29,9 +27,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// ✅ Store email in context for route handlers
-		c.Set("email", claims.Email)
+		// ✅ Store user_id in context instead of email
+		c.Set("user_id", claims.UserID)
 
-		c.Next() // ✅ Continue to the next handler
+		c.Next()
 	}
 }

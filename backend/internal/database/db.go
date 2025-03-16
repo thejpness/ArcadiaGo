@@ -18,5 +18,5 @@ func InitDB() {
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
-	fmt.Println("Database connected successfully")
+	fmt.Println("✅ Database connected successfully")
 }

@@ -4,7 +4,7 @@ export const API_URL = "http://localhost:8080";
  * Logs in the user and stores session via cookies
  * @param email - User email
  * @param password - User password
- * @returns Success message
+ * @returns Token string
  */
 export async function loginUser(email: string, password: string): Promise<string> {
   const response = await fetch(`${API_URL}/login`, {
@@ -19,7 +19,7 @@ export async function loginUser(email: string, password: string): Promise<string
 
   if (!response.ok) throw new Error(data.error || "Login failed");
 
-  return data.message;
+  return data.token; // ✅ Ensure backend returns a token
 }
 
 /**
@@ -54,28 +54,37 @@ export async function logoutUser(): Promise<string> {
     credentials: "include", // ✅ Ensures cookies are sent for logout
   });
 
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) throw new Error("Logout failed");
 
-  if (!response.ok) throw new Error(data.error || "Logout failed");
-
-  return data.message;
+  return "Logged out successfully";
 }
 
 /**
  * Fetches the authenticated user's details
- * @returns User data (Modify this to match backend response)
+ * @returns User data or null if not authenticated
  */
-export async function fetchUser(): Promise<{ email: string }> {
-  const response = await fetch(`${API_URL}/user`, {
-    method: "GET",
-    credentials: "include", // ✅ Ensures cookies are included in request
-  });
+export async function fetchUser(): Promise<{ email: string } | null> {
+  const token = localStorage.getItem("authToken");
+  if (!token) {
+    console.warn("⚠️ No auth token found. Skipping user fetch.");
+    return null;
+  }
 
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  try {
+    const response = await fetch(`${API_URL}/user`, {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${token}` },
+      credentials: "include",
+    });
 
-  if (!response.ok) throw new Error(data.error || "Failed to fetch user data");
+    if (!response.ok) {
+      console.warn("⚠️ User is not authenticated:", response.status);
+      return null; // ✅ Gracefully handle 401 errors instead of throwing
+    }
 
-  return data;
+    return await response.json();
+  } catch (error) {
+    console.error("❌ Failed to fetch user:", error);
+    return null;
+  }
 }

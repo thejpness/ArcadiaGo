@@ -5,81 +5,87 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ✅ Struct to store JWT claims
+// ✅ JWT Claims Struct
 type Claims struct {
-	Email string `json:"email"`
+	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
-// ✅ Securely load JWT Secret & Signing Method from environment variables
-var jwtSecret []byte
-var jwtRefreshSecret []byte
-var jwtSigningMethod *jwt.SigningMethodHMAC
-var accessTokenExpiry time.Duration
-var refreshTokenExpiry time.Duration
-
-func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("⚠️ Warning: No .env file found, using default JWT secret.")
+// ✅ Load JWT Secrets Securely
+func getSecret(envVar string, defaultValue string) []byte {
+	secret := os.Getenv(envVar)
+	if secret == "" {
+		log.Printf("⚠️ WARNING: %s is not set, using default value!", envVar)
+		secret = defaultValue // Set a default secret (only for development)
 	}
-
-	secret := os.Getenv("JWT_SECRET")
-	refreshSecret := os.Getenv("JWT_REFRESH_SECRET")
-
-	if secret == "" || refreshSecret == "" {
-		log.Fatal("❌ JWT_SECRET or JWT_REFRESH_SECRET is missing! Set them in .env")
-	}
-
-	jwtSecret = []byte(secret)
-	jwtRefreshSecret = []byte(refreshSecret)
-
-	// ✅ Allow configurable signing method (default: HS256)
-	signingMethod := os.Getenv("JWT_SIGNING_METHOD")
-	if signingMethod == "HS512" {
-		jwtSigningMethod = jwt.SigningMethodHS512
-	} else {
-		jwtSigningMethod = jwt.SigningMethodHS256
-	}
-
-	// ✅ Set configurable expiration times (default: 1hr access, 7d refresh)
-	accessTokenExpiry = time.Hour
-	refreshTokenExpiry = 7 * 24 * time.Hour
+	return []byte(secret)
 }
 
-// ✅ Secure Password Validation Function (Fixed for Go)
+var jwtSecret = getSecret("JWT_SECRET", "default-secret-key-should-be-longer-than-this")
+var jwtRefreshSecret = getSecret("JWT_REFRESH_SECRET", "default-refresh-key-should-be-longer")
+
+// ✅ Use regex only for valid characters and length
+var passwordRegex = regexp.MustCompile(`^[A-Za-z\d@$!%*?&.]{8,64}$`)
+
+// ✅ Ensure the password meets security requirements
 func ValidatePassword(password string) error {
-	// ✅ Manually enforce rules instead of using unsupported lookaheads
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters long")
 	}
-	if !regexp.MustCompile(`[A-Z]`).MatchString(password) {
+	if len(password) > 64 {
+		return errors.New("password must not exceed 64 characters")
+	}
+	if !passwordRegex.MatchString(password) {
+		return errors.New("password contains invalid characters")
+	}
+
+	hasUpper := false
+	hasLower := false
+	hasNumber := false
+	hasSpecial := false
+	specialChars := "@$!%*?&."
+
+	for _, char := range password {
+		switch {
+		case char >= 'A' && char <= 'Z':
+			hasUpper = true
+		case char >= 'a' && char <= 'z':
+			hasLower = true
+		case char >= '0' && char <= '9':
+			hasNumber = true
+		case strings.ContainsRune(specialChars, char):
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper {
 		return errors.New("password must contain at least 1 uppercase letter")
 	}
-	if !regexp.MustCompile(`[a-z]`).MatchString(password) {
+	if !hasLower {
 		return errors.New("password must contain at least 1 lowercase letter")
 	}
-	if !regexp.MustCompile(`\d`).MatchString(password) {
+	if !hasNumber {
 		return errors.New("password must contain at least 1 number")
 	}
-	if !regexp.MustCompile(`[@$!%*?&]`).MatchString(password) {
+	if !hasSpecial {
 		return errors.New("password must contain at least 1 special character (@$!%*?&)")
 	}
 
 	return nil
 }
 
-// ✅ Hash password before storing in DB
+// ✅ Hash Password
 func HashPassword(password string) (string, error) {
 	if err := ValidatePassword(password); err != nil {
-		return "", err // ❌ Reject weak passwords
+		return "", err
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -90,31 +96,36 @@ func HashPassword(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-// ✅ Compare stored hash with user input password
-func CheckPassword(hashedPassword, password string) error {
+// ✅ Check Password Hash
+func CheckPassword(hashedPassword, password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	if err != nil {
-		log.Println("❌ Password validation failed:", err)
+		log.Println("❌ Password verification failed:", err)
+		return false
 	}
-	return err
+	return true
 }
 
-// ✅ Generate JWT access token
-func GenerateAccessToken(email string) (string, error) {
-	return generateToken(email, jwtSecret, accessTokenExpiry)
+// ✅ Generate JWT Access Token
+func GenerateAccessToken(userID uuid.UUID) (string, error) {
+	return generateToken(userID.String(), jwtSecret, time.Hour)
 }
 
-// ✅ Generate JWT refresh token
-func GenerateRefreshToken(email string) (string, error) {
-	return generateToken(email, jwtRefreshSecret, refreshTokenExpiry)
+// ✅ Generate JWT Refresh Token
+func GenerateRefreshToken(userID uuid.UUID) (string, error) {
+	return generateToken(userID.String(), jwtRefreshSecret, 7*24*time.Hour)
 }
 
-// ✅ Core function for generating tokens
-func generateToken(email string, secret []byte, expiry time.Duration) (string, error) {
+// ✅ Core JWT Token Generation Function
+func generateToken(userID string, secret []byte, expiry time.Duration) (string, error) {
+	if len(secret) < 32 {
+		log.Println("⚠️ WARNING: JWT secret is too short. Use at least 32 characters!")
+	}
+
 	expirationTime := time.Now().Add(expiry)
 
 	claims := &Claims{
-		Email: email,
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -122,7 +133,7 @@ func generateToken(email string, secret []byte, expiry time.Duration) (string, e
 		},
 	}
 
-	token := jwt.NewWithClaims(jwtSigningMethod, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signedToken, err := token.SignedString(secret)
 	if err != nil {
 		log.Println("❌ Error signing JWT:", err)
@@ -132,7 +143,7 @@ func generateToken(email string, secret []byte, expiry time.Duration) (string, e
 	return signedToken, nil
 }
 
-// ✅ Validate JWT token (supports both access & refresh)
+// ✅ Validate JWT Token
 func ValidateToken(tokenString string, isRefresh bool) (*Claims, error) {
 	secret := jwtSecret
 	if isRefresh {
@@ -140,22 +151,21 @@ func ValidateToken(tokenString string, isRefresh bool) (*Claims, error) {
 	}
 
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			log.Println("❌ Invalid JWT signing method:", token.Header["alg"])
-			return nil, errors.New("invalid signing method")
-		}
 		return secret, nil
 	})
 
-	if err != nil {
-		log.Println("❌ Token validation failed:", err)
+	if err != nil || !token.Valid {
 		return nil, errors.New("invalid token")
 	}
 
 	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		log.Println("❌ Invalid token claims")
+	if !ok {
 		return nil, errors.New("invalid token claims")
+	}
+
+	// ✅ Check if token has expired
+	if claims.ExpiresAt.Time.Before(time.Now()) {
+		return nil, errors.New("token has expired")
 	}
 
 	return claims, nil
